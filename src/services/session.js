@@ -145,14 +145,14 @@ export class WhatsAppSession {
         5000,
         "getNumberId"
       );
-      if (registered === null) {
-        this._addLog("warn", "Número não registrado no WhatsApp", { to: cleanNumber });
-        return this._fail("NOT_REGISTERED", "Número não registrado no WhatsApp.", cleanNumber);
-      }
-      if (typeof registered === "object" && registered._serialized) {
-        chatId = registered._serialized;
-      } else if (typeof registered === "string" && (registered.includes("@") || registered.length > 15)) {
-        chatId = registered;
+      if (registered !== null) {
+        if (typeof registered === "object" && registered._serialized) {
+          chatId = registered._serialized;
+        } else if (typeof registered === "string" && (registered.includes("@") || registered.length > 15)) {
+          chatId = registered;
+        }
+      } else {
+        this._addLog("warn", "getNumberId retornou null, tentando @c.us como fallback", { to: cleanNumber });
       }
 
       const sent = await withTimeout(
