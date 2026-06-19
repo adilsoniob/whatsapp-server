@@ -20,7 +20,7 @@ export const config = {
   // Backoff inicial (multiplica a cada falha)
   reconnectBaseDelayMs: parseInt(process.env.RECONNECT_BASE_DELAY_MS || "8000", 10),
   // Pasta da sessão WhatsApp (suporta SESSION_FOLDER para Railway)
-  sessionFolder: process.env.SESSION_FOLDER || "./session",
+  sessionFolder: process.env.SESSION_FOLDER || "./data/session",
   // Número máximo de contas simultâneas
   maxAccounts: parseInt(process.env.MAX_ACCOUNTS || "1", 10),
 };
