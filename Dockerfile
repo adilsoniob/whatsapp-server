@@ -4,9 +4,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     libnspr4 \
     libnss3 \
-    libatk1.0-0t64 \
-    libatk-bridge2.0-0t64 \
-    libcups2t64 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
     libdrm2 \
     libxkbcommon0 \
     libxcomposite1 \
@@ -14,10 +14,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxfixes3 \
     libxrandr2 \
     libgbm1 \
-    libasound2t64 \
+    libasound2 \
     libpango-1.0-0 \
     libcairo2 \
-    libatspi2.0-0t64 \
+    libatspi2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
