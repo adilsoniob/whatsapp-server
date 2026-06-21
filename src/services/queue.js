@@ -217,10 +217,13 @@ export async function fail(id, error) {
   return true;
 }
 
-export async function revertToPending(id) {
+export async function revertToPending(id, errorMsg) {
   const d = await getDb();
   const ts = nowISO();
-  d.run("UPDATE message_queue SET status = 'pending', last_error = NULL, updated_at = ? WHERE id = ? AND status = 'processing'", [ts, id]);
+  d.run(
+    "UPDATE message_queue SET status = 'pending', account = NULL, last_error = ?, created_at = ?, updated_at = ? WHERE id = ? AND status = 'processing'",
+    [errorMsg || null, ts, ts, id]
+  );
   _save();
   return true;
 }

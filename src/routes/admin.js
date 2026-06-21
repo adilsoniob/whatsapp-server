@@ -1238,20 +1238,27 @@ window.cancelCampaign = async function(id) {
 };
 
 window.viewCampaign = async function(id) {
-  var r = await api("/api/campaigns/" + id);
-  var statsR = await api("/api/campaigns/" + id + "/stats");
-  if (!r.success || !r.campaign) return;
-  var c = r.campaign;
-  var s = statsR.stats || {};
-  var msg = "Campanha: " + c.name + "\\n";
-  msg += "Status: " + c.status + "\\n";
-  msg += "Total: " + c.total_numbers + " numeros\\n";
-  msg += "Enviados: " + (s.sent || 0) + "\\n";
-  msg += "Pendentes: " + (s.pending || 0) + "\\n";
-  msg += "Erros: " + (s.error || 0) + "\\n";
-  msg += "Delay: " + c.delay_min + "s - " + c.delay_max + "s\\n";
-  if (s.estimatedCompletion) msg += "Tempo estimado: " + s.estimatedCompletion + "\\n";
-  msg += "Mensagens: " + (c.messages || []).length + " modelos\\n";
+  var reportR = await api("/api/campaigns/" + id + "/report");
+  if (!reportR.success || !reportR.report) { toast("Erro ao carregar relatorio", "error"); return; }
+  var report = reportR.report;
+  var summary = reportR.summary || {};
+  var msg = "📊 RELATORIO DE ENVIOS\\n";
+  msg += "─────────────────────────\\n";
+  msg += "Total: " + summary.total + "\\n";
+  msg += "✅ Enviados: " + summary.sent + "\\n";
+  msg += "⏳ Pendentes: " + summary.pending + "\\n";
+  msg += "❌ Falhas: " + summary.failed + "\\n";
+  msg += "📨 Na fila: " + summary.queued + "\\n";
+  msg += "─────────────────────────\\n\\n";
+  for (var i = 0; i < report.length; i++) {
+    var r = report[i];
+    var icon = r.status === "sent" || r.queueStatus === "completed" ? "✅" : r.error ? "❌" : "⏳";
+    var statusLabel = r.status === "sent" || r.queueStatus === "completed" ? "ENVIADO" : r.error ? "FALHA: " + r.error : r.status === "queued" ? "NA FILA" : "PENDENTE";
+    msg += icon + " " + r.phone + "\\n";
+    msg += "   " + statusLabel + "\\n";
+    if (r.message) msg += "   Msg: " + r.message.slice(0, 80) + "\\n";
+    msg += "\\n";
+  }
   alert(msg);
 };
 

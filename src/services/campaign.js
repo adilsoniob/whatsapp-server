@@ -341,9 +341,13 @@ class CampaignManager {
 
     const timer = setTimeout(async () => {
       this._campaignTimers.delete(id);
-      const current = await this.getCampaign(id);
-      if (current && current.status === CAMPAIGN_STATES.RUNNING) {
-        this._processCampaign(id, current, whatsappService);
+      try {
+        const current = await this.getCampaign(id);
+        if (current && current.status === CAMPAIGN_STATES.RUNNING) {
+          this._processCampaign(id, current, whatsappService);
+        }
+      } catch (err) {
+        log.error("[campaign] Erro no timer agendado", { campaignId: id, error: err.message });
       }
     }, delayMs);
     this._campaignTimers.set(id, timer);

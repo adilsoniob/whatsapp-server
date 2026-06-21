@@ -134,8 +134,8 @@ export class WhatsAppSession {
   async sendFromQueue(queueId, phone, message) {
     const check = await this.stealth.beforeSend(phone, this.client);
     if (!check.allowed) {
-      if (check.reason === "DAILY_LIMIT" || check.reason === "CONTACT_WINDOW") {
-        await queue.revertToPending(queueId);
+      if (check.reason === "DAILY_LIMIT" || check.reason === "CONTACT_WINDOW" || check.reason === "OUT_OF_HOURS") {
+        await queue.revertToPending(queueId, check.message);
         this._addLog("warn", check.message, { to: phone, queueId });
       }
       return { success: false, code: check.reason, error: check.message };
@@ -147,7 +147,7 @@ export class WhatsAppSession {
       this.stealth.afterSend(phone);
       this.storage?.addMessage({ to: phone, status: "sent", source: "api", account: this.index, metadata: JSON.stringify({ queueId }) });
     } else if (result.code === "RATE_LIMIT") {
-      await queue.revertToPending(queueId);
+      await queue.revertToPending(queueId, "rate_limit");
     } else if (result.error && (result.error.includes("No LID") || result.error.includes("não registrado"))) {
       await queue.deadletter(queueId, result.error);
       this.storage?.addMessage({ to: phone, status: "failed", source: "api", account: this.index, metadata: JSON.stringify({ queueId, error: result.error }) });

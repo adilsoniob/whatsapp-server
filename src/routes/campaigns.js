@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { campaignManager, EMOJI_POOL } from "../services/campaign.js";
+import { getDbInstance } from "../services/queue.js";
 
 export function createCampaignRouter(authMiddleware) {
   const router = Router();
@@ -43,6 +44,50 @@ export function createCampaignRouter(authMiddleware) {
       const limit = parseInt(req.query.limit, 10) || 100;
       const sends = await campaignManager.getCampaignSends(parseInt(req.params.id, 10), status, limit);
       res.json({ success: true, sends });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.get("/:id/report", async (req, res) => {
+    try {
+      const campaign = await campaignManager.getCampaign(parseInt(req.params.id, 10));
+      if (!campaign) return res.status(404).json({ success: false, error: "Campanha nao encontrada" });
+      const sends = await campaignManager.getCampaignSends(parseInt(req.params.id, 10), "all", 500);
+      const db = getDbInstance();
+      const phones = sends.map((s) => s.phone);
+      let queueMap = {};
+      if (db && phones.length) {
+        const placeholders = phones.map(() => "?").join(",");
+        const rows = db.exec(
+          `SELECT id, phone, status, retry_count, last_error, created_at, completed_at
+           FROM message_queue WHERE metadata LIKE ? OR phone IN (${placeholders})`,
+          [`%"campaignId":${req.params.id}%`, ...phones]
+        );
+        if (rows.length) {
+          for (const row of rows[0].values) {
+            queueMap[row[1]] = { status: row[2], retries: row[3], error: row[4], createdAt: row[5], completedAt: row[6] };
+          }
+        }
+      }
+      const report = sends.map((s) => ({
+        phone: s.phone,
+        status: s.status,
+        queueStatus: queueMap[s.phone]?.status || null,
+        error: s.error || queueMap[s.phone]?.error || null,
+        retries: queueMap[s.phone]?.retries || 0,
+        message: s.message_sent || null,
+        sentAt: s.sent_at || null,
+        completedAt: queueMap[s.phone]?.completedAt || null,
+      }));
+      const summary = { total: report.length, sent: 0, pending: 0, failed: 0, queued: 0 };
+      for (const r of report) {
+        if (r.status === "sent" || r.queueStatus === "completed") summary.sent++;
+        else if (r.queueStatus === "pending" || r.status === "pending") summary.pending++;
+        else if (r.status === "error" || r.queueStatus === "failed" || r.queueStatus === "deadletter") summary.failed++;
+        else if (r.status === "queued") summary.queued++;
+      }
+      res.json({ success: true, report, summary });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
     }
