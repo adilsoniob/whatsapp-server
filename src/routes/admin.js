@@ -1263,7 +1263,7 @@ async function clearErrors() {
 }
 
 async function clearAllButTemplates() {
-  if (!confirm("ISSO VAI APAGAR TUDO: fila, mensagens, logs, contatos, campanhas, erros e mensagens WhatsApp.\n\nOs templates (pool de mensagens) serao preservados.\n\nContinuar?")) return;
+  if (!confirm("ISSO VAI APAGAR TUDO: fila, mensagens, logs, contatos, campanhas, erros e mensagens WhatsApp.\\n\\nOs templates (pool de mensagens) serao preservados.\\n\\nContinuar?")) return;
   var d = await api("/api/admin/clear/all-but-templates", { method:"POST" });
   toast(d.message || "Pronto", d.success ? "success" : "error");
   fullRefresh();
