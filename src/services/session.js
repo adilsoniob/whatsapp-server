@@ -175,37 +175,18 @@ export class WhatsAppSession {
         "getNumberId"
       );
       if (registered !== null) {
-        if (typeof registered === "object" && registered._serialized) {
-          chatId = registered._serialized;
-        } else if (typeof registered === "string" && (registered.includes("@") || registered.length > 15)) {
-          chatId = registered;
+        const lid = typeof registered === "object" ? registered._serialized : (typeof registered === "string" ? registered : null);
+        // Se retornou LID (@lid), IGNORA e usa @c.us — LID não sincroniza com o celular
+        if (lid && lid.endsWith("@lid")) {
+          this._addLog("warn", "getNumberId retornou LID, usando @c.us para compatibilidade com sync do celular", { to: cleanNumber, lid });
+        } else if (lid) {
+          chatId = lid;
         }
       } else {
         this._addLog("warn", "getNumberId retornou null, tentando @c.us como fallback", { to: cleanNumber });
       }
 
-      // Garante que o chat existe no Store antes de enviar (cria se necessário)
-      const chatEnsured = await withTimeout(
-        this.client.pupPage.evaluate(async (cid) => {
-          try {
-            const wid = window.require('WAWebWidFactory').createWid(cid);
-            const col = window.require('WAWebCollections');
-            let c = col.Chat.get(wid);
-            if (!c) {
-              const r = await window.require('WAWebFindChatAction').findOrCreateLatestChat(wid);
-              c = r?.chat;
-            }
-            return !!c;
-          } catch { return false; }
-        }, chatId),
-        8000,
-        "ensureChat"
-      ).catch(() => false);
-
-      if (!chatEnsured) {
-        this._addLog("warn", "Não foi possível garantir o chat no Store, tentando sendMessage mesmo assim", { to: cleanNumber });
-      }
-
+      // Usa client.sendMessage() padrão do whatsapp-web.js (sem Puppeteer direto)
       const sent = await withTimeout(
         this.client.sendMessage(chatId, message),
         this.config.sendTimeoutMs,
@@ -213,8 +194,8 @@ export class WhatsAppSession {
       );
 
       if (!sent) {
-        this._addLog("message_error", "sendMessage retornou nulo (chat não encontrado)", { to: cleanNumber });
-        return this._fail("SEND_ERROR", "sendMessage retornou nulo — chat não encontrado no Store do WhatsApp.", cleanNumber);
+        this._addLog("message_error", "sendMessage retornou nulo", { to: cleanNumber });
+        return this._fail("SEND_ERROR", "sendMessage retornou nulo — chat não encontrado.", cleanNumber);
       }
 
       this.lastSendAt = new Date().toISOString();
@@ -222,7 +203,7 @@ export class WhatsAppSession {
       this.rate.sent.push(this.rate.lastSend);
       const messageId = sent?.id?._serialized || sent?.id || null;
 
-      // Força sincronização do chat no Store
+      // Sincronização pós-envio
       setImmediate(() => {
         this.client.getChatById(chatId).then(() => {
           this.client.getChats().catch(() => {});

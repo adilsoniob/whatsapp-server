@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { getStealthConfig, setStealthEnabled } from "../services/stealth/runtime.js";
+import { clearAll, getDbInstance } from "../services/queue.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -32,6 +33,29 @@ function getNextMsgId(msgs) {
     _nextMsgId = msgs.reduce((max, m) => Math.max(max, m.id || 0), 0) + 1;
   }
   return _nextMsgId++;
+}
+
+const TEMPLATES_FILE = join(DATA_DIR, "templates.json");
+
+function loadTemplates() {
+  ensureDataDir();
+  if (!existsSync(TEMPLATES_FILE)) return [];
+  try {
+    return JSON.parse(readFileSync(TEMPLATES_FILE, "utf8"));
+  } catch { return []; }
+}
+
+function saveTemplates(templates) {
+  ensureDataDir();
+  writeFileSync(TEMPLATES_FILE, JSON.stringify(templates, null, 2));
+}
+
+let _nextTemplateId = null;
+function getNextTemplateId(templates) {
+  if (_nextTemplateId === null) {
+    _nextTemplateId = templates.reduce((max, t) => Math.max(max, t.id || 0), 0) + 1;
+  }
+  return _nextTemplateId++;
 }
 
 export function createAdminRouter(whatsapp, authMiddleware) {
@@ -226,6 +250,110 @@ export function createAdminRouter(whatsapp, authMiddleware) {
     if (messages.length === len) return res.status(404).json({ success: false, error: "Mensagem não encontrada" });
     saveWAMessages(messages);
     res.json({ success: true, message: "Mensagem excluída" });
+  });
+
+  // ---- Clear Data ----
+
+  function writeEmptyJSON(path) {
+    ensureDataDir();
+    writeFileSync(path, "[]", "utf-8");
+  }
+
+  router.post("/api/admin/clear/queue", async (_req, res) => {
+    try {
+      const count = await clearAll();
+      res.json({ success: true, message: `Fila limpa (${count} itens removidos)` });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.post("/api/admin/clear/messages", (_req, res) => {
+    try {
+      writeEmptyJSON(storage.messagesPath);
+      res.json({ success: true, message: "Mensagens apagadas" });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.post("/api/admin/clear/logs", (_req, res) => {
+    try {
+      writeEmptyJSON(storage.logsPath);
+      res.json({ success: true, message: "Logs apagados" });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.post("/api/admin/clear/contacts", (_req, res) => {
+    try {
+      writeEmptyJSON(storage.contactsPath);
+      res.json({ success: true, message: "Contatos apagados" });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.post("/api/admin/clear/templates", (_req, res) => {
+    try {
+      saveTemplates([]);
+      res.json({ success: true, message: "Templates apagados" });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.post("/api/admin/clear/whatsapp-messages", (_req, res) => {
+    try {
+      saveWAMessages([]);
+      res.json({ success: true, message: "Mensagens WhatsApp apagadas" });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.post("/api/admin/clear/campaigns", async (_req, res) => {
+    try {
+      const db = getDbInstance();
+      if (db) {
+        db.exec("DELETE FROM campaigns");
+        db.exec("DELETE FROM campaign_sends");
+      }
+      res.json({ success: true, message: "Campanhas apagadas" });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.post("/api/admin/clear/errors", async (_req, res) => {
+    try {
+      const failed = await clearAll("failed");
+      const dead = await clearAll("deadletter");
+      res.json({ success: true, message: `Erros apagados (${failed + dead} itens)` });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.post("/api/admin/clear/all-but-templates", async (_req, res) => {
+    try {
+      await clearAll();
+      writeEmptyJSON(storage.messagesPath);
+      writeEmptyJSON(storage.logsPath);
+      writeEmptyJSON(storage.contactsPath);
+      saveWAMessages([]);
+      const db = getDbInstance();
+      if (db) {
+        db.exec("DELETE FROM campaigns");
+        db.exec("DELETE FROM campaign_sends");
+      }
+      await clearAll("failed");
+      await clearAll("deadletter");
+      res.json({ success: true, message: "Tudo limpo (templates preservados)" });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   });
 
   // ---- Admin HTML ----
@@ -423,6 +551,7 @@ tr:hover td{background:rgba(59,130,246,.04)}
           <div class="tab" data-tab="logs">Logs</div>
           <div class="tab" data-tab="relatorios">Relatórios</div>
           <div class="tab" data-tab="campanhas">Campanhas</div>
+          <div class="tab" data-tab="limpeza">Limpeza</div>
         </div>
         <!-- Dashboard -->
         <div class="tab-content active" id="tabDashboard">
@@ -521,6 +650,23 @@ tr:hover td{background:rgba(59,130,246,.04)}
               <thead><tr><th>Nome</th><th>Status</th><th>Enviado</th><th>Pendente</th><th>Erros</th><th>Criada</th><th>Ações</th></tr></thead>
               <tbody id="campaignsBody"><tr><td colspan="7" class="empty">Nenhuma campanha criada.</td></tr></tbody>
             </table>
+          </div>
+        </div>
+        <!-- Limpeza -->
+        <div class="tab-content" id="tabLimpeza">
+          <h3 style="margin:0 0 .85rem;font-size:.9rem">Limpeza de Dados</h3>
+          <p style="font-size:.72rem;color:var(--muted);margin-bottom:.75rem">Clique em um item para limpar os dados correspondentes. As acoes sao irreversiveis.</p>
+          <div style="display:grid;gap:.5rem;max-width:500px">
+            <button class="btn btn-danger btn-sm" style="padding:.6rem 1rem;justify-content:flex-start" onclick="clearQueue()">Limpar Fila</button>
+            <button class="btn btn-danger btn-sm" style="padding:.6rem 1rem;justify-content:flex-start" onclick="clearMessages()">Limpar Mensagens</button>
+            <button class="btn btn-danger btn-sm" style="padding:.6rem 1rem;justify-content:flex-start" onclick="clearLogs()">Limpar Logs</button>
+            <button class="btn btn-danger btn-sm" style="padding:.6rem 1rem;justify-content:flex-start" onclick="clearContacts()">Limpar Contatos</button>
+            <button class="btn btn-danger btn-sm" style="padding:.6rem 1rem;justify-content:flex-start" onclick="clearTemplates()">Limpar Templates</button>
+            <button class="btn btn-danger btn-sm" style="padding:.6rem 1rem;justify-content:flex-start" onclick="clearWAMessages()">Limpar Mensagens WhatsApp</button>
+            <button class="btn btn-danger btn-sm" style="padding:.6rem 1rem;justify-content:flex-start" onclick="clearCampaigns()">Limpar Campanhas</button>
+            <button class="btn btn-danger btn-sm" style="padding:.6rem 1rem;justify-content:flex-start" onclick="clearErrors()">Limpar Erros</button>
+            <div style="border-top:1px solid var(--border);margin:.3rem 0"></div>
+            <button class="btn btn-warning btn-sm" style="padding:.6rem 1rem;justify-content:flex-start;font-weight:700" onclick="clearAllButTemplates()">Limpar Tudo (menos Templates)</button>
           </div>
         </div>
       </div>
@@ -937,6 +1083,7 @@ function openTab(id, el) {
   if (id === "templates") loadWAMessages();
   if (id === "fila") loadQueue();
   if (id === "campanhas") loadCampaigns();
+  if (id === "limpeza") {} // limpeza is static
 }
 
 qa("#mainTabs .tab").forEach(function(tab) {
@@ -1059,6 +1206,67 @@ async function clearCompleted() {
   var d = await api("/api/queue/clear-completed", { method:"POST" });
   toast(d.message || "Limpos", "info");
   loadQueue();
+}
+
+async function clearQueue() {
+  if (!confirm("Limpar toda a fila de envio?")) return;
+  var d = await api("/api/admin/clear/queue", { method:"POST" });
+  toast(d.message || "Pronto", d.success ? "success" : "error");
+  loadQueue();
+}
+
+async function clearMessages() {
+  if (!confirm("Apagar todo o historico de mensagens?")) return;
+  var d = await api("/api/admin/clear/messages", { method:"POST" });
+  toast(d.message || "Pronto", d.success ? "success" : "error");
+  loadMessages();
+}
+
+async function clearLogs() {
+  if (!confirm("Apagar todos os logs de eventos?")) return;
+  var d = await api("/api/admin/clear/logs", { method:"POST" });
+  toast(d.message || "Pronto", d.success ? "success" : "error");
+  loadLogs();
+}
+
+async function clearContacts() {
+  if (!confirm("Apagar todos os contatos?")) return;
+  var d = await api("/api/admin/clear/contacts", { method:"POST" });
+  toast(d.message || "Pronto", d.success ? "success" : "error");
+  loadContacts();
+}
+
+async function clearTemplates() {
+  if (!confirm("Apagar todos os templates (pool de mensagens)?")) return;
+  var d = await api("/api/admin/clear/templates", { method:"POST" });
+  toast(d.message || "Pronto", d.success ? "success" : "error");
+}
+
+async function clearWAMessages() {
+  if (!confirm("Apagar todas as mensagens WhatsApp (EdgeOne)?")) return;
+  var d = await api("/api/admin/clear/whatsapp-messages", { method:"POST" });
+  toast(d.message || "Pronto", d.success ? "success" : "error");
+}
+
+async function clearCampaigns() {
+  if (!confirm("Apagar todas as campanhas e registros de envio?")) return;
+  var d = await api("/api/admin/clear/campaigns", { method:"POST" });
+  toast(d.message || "Pronto", d.success ? "success" : "error");
+  loadCampaigns();
+}
+
+async function clearErrors() {
+  if (!confirm("Apagar todos os itens com erro da fila?")) return;
+  var d = await api("/api/admin/clear/errors", { method:"POST" });
+  toast(d.message || "Pronto", d.success ? "success" : "error");
+  loadQueue();
+}
+
+async function clearAllButTemplates() {
+  if (!confirm("ISSO VAI APAGAR TUDO: fila, mensagens, logs, contatos, campanhas, erros e mensagens WhatsApp.\n\nOs templates (pool de mensagens) serao preservados.\n\nContinuar?")) return;
+  var d = await api("/api/admin/clear/all-but-templates", { method:"POST" });
+  toast(d.message || "Pronto", d.success ? "success" : "error");
+  fullRefresh();
 }
 
 async function toggleStealth() {

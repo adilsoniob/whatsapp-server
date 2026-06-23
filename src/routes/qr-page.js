@@ -12,60 +12,279 @@ const HTML = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WhatsApp | Vale Sa�de</title>
+<title>WhatsApp | Vale Saúde</title>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #0b1120;
-  --card: #151f35;
-  --border: #1e2d4a;
-  --text: #e2e8f0;
-  --muted: #7e8ea8;
-  --green: #22c55e;
-  --yellow: #eab308;
+  --bg: #0a0f1c;
+  --bg-gradient: radial-gradient(circle at top center, #16203d 0%, #0a0f1c 100%);
+  --card: rgba(21, 31, 53, 0.7);
+  --card-border: rgba(30, 45, 74, 0.8);
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
   --accent: #3b82f6;
+  --accent-glow: rgba(59, 130, 246, 0.5);
+  --success: #22c55e;
+  --success-bg: rgba(34, 197, 94, 0.1);
+  --warning: #eab308;
+  --warning-bg: rgba(234, 179, 8, 0.1);
+  --error: #ef4444;
+  --error-bg: rgba(239, 68, 68, 0.1);
+  --border-color: rgba(51, 65, 85, 0.5);
+  --shadow-premium: 0 20px 50px rgba(0, 0, 0, 0.5);
 }
-*{margin:0;padding:0;box-sizing:border-box}
-body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text)}
-.qr-wrap{text-align:center;padding:2.5rem;max-width:400px;width:90%}
-.logo{margin-bottom:1.5rem}
-.logo svg{width:40px;height:40px}
-h1{font-size:1.3rem;font-weight:600;letter-spacing:-.02em;margin-bottom:.35rem}
-.sub{font-size:.85rem;color:var(--muted);margin-bottom:1.75rem}
-.qr-box{background:var(--card);border-radius:16px;padding:1.25rem;border:1px solid var(--border);position:relative;min-height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center}
-#qr{width:220px;height:220px;border-radius:12px;background:#fff;padding:8px;display:none;transition:opacity .4s}
-.qr-placeholder{width:220px;height:220px;border-radius:12px;background:rgba(30,45,74,.5);display:flex;align-items:center;justify-content:center;border:2px dashed var(--border)}
-.qr-placeholder svg{width:48px;height:48px;opacity:.3}
-.status{margin-top:1.25rem;padding:.7rem 1rem;border-radius:10px;font-weight:500;font-size:.82rem;display:flex;align-items:center;justify-content:center;gap:.5rem;transition:all .3s}
-.st-ok{background:rgba(34,197,94,0.1);color:var(--green);border:1px solid rgba(34,197,94,0.2)}
-.st-await{background:rgba(234,179,8,0.1);color:var(--yellow);border:1px solid rgba(234,179,8,0.2)}
-.st-off{background:rgba(126,142,168,0.1);color:var(--muted);border:1px solid rgba(126,142,168,0.15)}
-.spin{display:inline-block;width:16px;height:16px;border:2px solid rgba(126,142,168,.2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
-@keyframes spin{to{transform:rotate(360deg)}}
-.actions{margin-top:1.5rem;display:flex;gap:.5rem;justify-content:center}
-.btn{display:inline-flex;align-items:center;gap:.35rem;padding:.4rem 1rem;border-radius:8px;border:none;font-size:.78rem;font-weight:600;cursor:pointer;transition:all .15s;text-decoration:none}
-.btn-primary{background:var(--accent);color:#fff}
-.btn-primary:hover{box-shadow:0 4px 14px rgba(59,130,246,.35);transform:translateY(-1px)}
-.btn-outline{background:transparent;border:1px solid var(--border);color:var(--muted)}
-.btn-outline:hover{border-color:var(--text);color:var(--text)}
-.footer{margin-top:2rem;font-size:.7rem;color:var(--muted)}
-@media(max-width:480px){.qr-wrap{padding:1.5rem}#qr{width:180px;height:180px}.qr-placeholder{width:180px;height:180px}}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  background-image: var(--bg-gradient);
+  color: var(--text-main);
+  overflow: hidden;
+}
+
+/* Background Decorative Elements */
+body::before, body::after {
+  content: "";
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  background: var(--accent);
+  filter: blur(120px);
+  opacity: 0.15;
+  z-index: -1;
+}
+body::before { top: -100px; left: -100px; }
+body::after { bottom: -100px; right: -100px; }
+
+.qr-wrap {
+  text-align: center;
+  padding: 3rem 2rem;
+  max-width: 440px;
+  width: 90%;
+  animation: fadeUp 0.8s ease-out;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.logo {
+  margin-bottom: 2rem;
+  display: inline-flex;
+  padding: 1rem;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 20px;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
+}
+
+.logo svg {
+  width: 48px;
+  height: 48px;
+  filter: drop-shadow(0 0 8px var(--accent));
+}
+
+h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(to bottom, #fff 0%, #cbd5e1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.sub {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  margin-bottom: 2.5rem;
+  line-height: 1.5;
+}
+
+.qr-box {
+  background: var(--card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 24px;
+  padding: 2rem;
+  border: 1px solid var(--card-border);
+  position: relative;
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-premium);
+  transition: transform 0.3s ease;
+}
+
+.qr-box:hover {
+  transform: translateY(-5px);
+}
+
+#qr {
+  width: 240px;
+  height: 240px;
+  border-radius: 16px;
+  background: #fff;
+  padding: 12px;
+  display: none;
+  transition: opacity 0.4s ease;
+  box-shadow: 0 0 30px rgba(255, 255, 255, 0.1);
+}
+
+.qr-placeholder {
+  width: 240px;
+  height: 240px;
+  border-radius: 16px;
+  background: rgba(30, 45, 74, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--border-color);
+  transition: all 0.3s ease;
+}
+
+.qr-placeholder svg {
+  width: 64px;
+  height: 64px;
+  opacity: 0.2;
+}
+
+.status {
+  margin-top: 2rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: 12px;
+  font-weight: 500;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid transparent;
+}
+
+.st-ok {
+  background: var(--success-bg);
+  color: var(--success);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.st-await {
+  background: var(--warning-bg);
+  color: var(--warning);
+  border-color: rgba(234, 179, 8, 0.3);
+}
+
+.st-off {
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--text-muted);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+.spin {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(148, 163, 184, 0.2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.actions {
+  margin-top: 2.5rem;
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.25rem;
+  border-radius: 10px;
+  border: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  font-family: inherit;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 4px 12px var(--accent-glow);
+}
+
+.btn-primary:hover {
+  filter: brightness(1.1);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px var(--accent-glow);
+}
+
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+}
+
+.btn-outline:hover {
+  border-color: var(--text-main);
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05);
+  transform: translateY(-2px);
+}
+
+.footer {
+  margin-top: 3rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  opacity: 0.6;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+@media(max-width:480px){
+  .qr-wrap { padding: 2rem 1.5rem; }
+  h1 { font-size: 1.5rem; }
+  #qr, .qr-placeholder { width: 200px; height: 200px; }
+  .qr-box { padding: 1.5rem; min-height: 320px; }
+}
 </style>
 </head>
 <body>
 <div class="qr-wrap">
   <div class="logo">
-    <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
     </svg>
   </div>
   <h1>Conectar WhatsApp</h1>
-  <p class="sub">Escaneie o QR Code com o WhatsApp do seu celular</p>
+  <p class="sub">Escaneie o QR Code com o seu celular para sincronizar a conta</p>
 
   <div class="qr-box">
     <img id="qr" src="" alt="QR Code">
     <div class="qr-placeholder" id="placeholder">
-      <svg viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
         <line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/>
       </svg>
@@ -80,7 +299,7 @@ h1{font-size:1.3rem;font-weight:600;letter-spacing:-.02em;margin-bottom:.35rem}
     <a href="/admin" class="btn btn-outline">Painel Administrativo</a>
   </div>
 
-  <div class="footer">WhatsApp Server &mdash; Vale Sa�de</div>
+  <div class="footer">WhatsApp Server &bull; Vale Saúde</div>
 </div>
 
 <script>
@@ -118,7 +337,7 @@ h1{font-size:1.3rem;font-weight:600;letter-spacing:-.02em;margin-bottom:.35rem}
       return setAwait("QR Code gerado. Escaneie com seu WhatsApp.");
     }
     if (s.status === "starting" || s.status === "reconnecting") return setOff("Inicializando servidor...");
-    if (s.status === "auth_failure") return setOff("Falha de autenticacao. Reconectando...");
+    if (s.status === "auth_failure") return setOff("Falha de autenticação. Reconectando...");
     if (s.status === "offline") return setOff("Desconectado.");
     return setOff(s.message || "Aguardando...");
   }
