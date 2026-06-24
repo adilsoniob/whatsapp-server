@@ -169,39 +169,34 @@ export class WhatsAppSession {
 
     let chatId = `${cleanNumber}@c.us`;
     try {
-      // Tenta obter o ID do chat via getNumberId (funciona bem para contatos da agenda)
-      const registered = await withTimeout(
+      // Verifica se o número existe no WhatsApp via queryWidExists
+      // (consulta direta nos servidores do WhatsApp, não depende de contato na agenda)
+      let registered = await withTimeout(
         this.client.getNumberId(cleanNumber),
         5000,
         "getNumberId"
       );
-      if (registered !== null) {
-        const lid = typeof registered === "object" ? registered._serialized : (typeof registered === "string" ? registered : null);
-        if (lid && lid.endsWith("@lid")) {
-          this._addLog("warn", "getNumberId retornou LID, usando @c.us para compatibilidade com sync do celular", { to: cleanNumber, lid });
-        } else if (lid) {
-          chatId = lid;
-        }
-      } else {
-        // getNumberId retornou null (número fora da agenda ou com restrição de privacidade).
-        // Tenta resolver o chat diretamente via Store.Chat do WhatsApp Web,
-        // que cria a conversa de verdade e sincroniza com o celular.
-        this._addLog("warn", "getNumberId retornou null, resolvendo chat via Store.Chat.find", { to: cleanNumber });
-        try {
-          const resolved = await withTimeout(
-            this.client.pupPage.evaluate((number) => {
-              const id = number + "@c.us";
-              const chat = window.Store.Chat.get(id);
-              if (chat) return chat.id._serialized;
-              return window.Store.Chat.find(id).then(function(c) { return c.id._serialized; }).catch(function() { return id; });
-            }, cleanNumber),
-            5000,
-            "resolveChat"
-          );
-          if (resolved) chatId = resolved;
-        } catch (_) {
-          // Fallback: mantém @c.us
-        }
+
+      // Retry único em caso de falha transiente
+      if (registered === null) {
+        await new Promise((r) => setTimeout(r, 1000));
+        registered = await withTimeout(
+          this.client.getNumberId(cleanNumber),
+          5000,
+          "getNumberId-retry"
+        );
+      }
+
+      if (registered === null) {
+        this._addLog("warn", "getNumberId retornou null em ambas tentativas — número não registrado no WhatsApp", { to: cleanNumber });
+        return this._fail("NOT_REGISTERED", "Número não registrado no WhatsApp. Verifique se o número informado possui WhatsApp ativo.", cleanNumber);
+      }
+
+      const lid = typeof registered === "object" ? registered._serialized : (typeof registered === "string" ? registered : null);
+      if (lid && lid.endsWith("@lid")) {
+        this._addLog("warn", "getNumberId retornou LID, usando @c.us para compatibilidade com sync do celular", { to: cleanNumber, lid });
+      } else if (lid) {
+        chatId = lid;
       }
 
       const sent = await withTimeout(
