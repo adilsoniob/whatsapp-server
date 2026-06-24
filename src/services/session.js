@@ -194,7 +194,22 @@ export class WhatsAppSession {
 
       const lid = typeof registered === "object" ? registered._serialized : (typeof registered === "string" ? registered : null);
       if (lid && lid.endsWith("@lid")) {
-        this._addLog("warn", "getNumberId retornou LID, usando @c.us para compatibilidade com sync do celular", { to: cleanNumber, lid });
+        this._addLog("warn", "getNumberId retornou LID, resolvendo chat via Store.Chat.find para sincronizar com o celular", { to: cleanNumber, lid });
+        try {
+          const resolved = await withTimeout(
+            this.client.pupPage.evaluate((number) => {
+              const id = number + "@c.us";
+              const chat = window.Store.Chat.get(id);
+              if (chat) return chat.id._serialized;
+              return window.Store.Chat.find(id).then(function(c) { return c.id._serialized; }).catch(function() { return id; });
+            }, cleanNumber),
+            5000,
+            "resolveChat"
+          );
+          if (resolved) chatId = resolved;
+        } catch (_) {
+          this._addLog("warn", "Store.Chat.find falhou, mantendo @c.us", { to: cleanNumber });
+        }
       } else if (lid) {
         chatId = lid;
       }
