@@ -194,7 +194,7 @@ export class WhatsAppSession {
 
       const lid = typeof registered === "object" ? registered._serialized : (typeof registered === "string" ? registered : null);
       if (lid && lid.endsWith("@lid")) {
-        this._addLog("warn", "getNumberId retornou LID, resolvendo chat via Store.Chat.find para sincronizar com o celular", { to: cleanNumber, lid });
+        this._addLog("warn", "getNumberId retornou LID, resolvendo chat via Store.Chat.find + openChatWindow", { to: cleanNumber, lid });
         try {
           const resolved = await withTimeout(
             this.client.pupPage.evaluate((number) => {
@@ -207,8 +207,9 @@ export class WhatsAppSession {
             "resolveChat"
           );
           if (resolved) chatId = resolved;
+          await withTimeout(this.client.interface.openChatWindow(chatId), 3000, "openChatWindow").catch(() => {});
         } catch (_) {
-          this._addLog("warn", "Store.Chat.find falhou, mantendo @c.us", { to: cleanNumber });
+          this._addLog("warn", "Store.Chat.find/open falhou, mantendo @c.us", { to: cleanNumber });
         }
       } else if (lid) {
         chatId = lid;
@@ -233,9 +234,15 @@ export class WhatsAppSession {
       // Sincronização pós-envio — força o WhatsApp Web a sincronizar com o celular
       setImmediate(async () => {
         try {
+          await withTimeout(this.client.interface.openChatWindow(chatId), 3000, "openChatWindow-post").catch(() => {});
+        } catch (_) {}
+        try {
           const chat = await this.client.getChatById(chatId);
           if (chat) {
+            await chat.sendSeen().catch(() => {});
+            await new Promise((r) => setTimeout(r, 800));
             await chat.sendPresenceAvailable().catch(() => {});
+            await this.client.interface.openChatWindow(chatId).catch(() => {});
           }
         } catch (_) {}
         try {
