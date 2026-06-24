@@ -176,17 +176,26 @@ export class WhatsAppSession {
       );
       if (registered !== null) {
         const lid = typeof registered === "object" ? registered._serialized : (typeof registered === "string" ? registered : null);
-        // Se retornou LID (@lid), IGNORA e usa @c.us — LID não sincroniza com o celular
         if (lid && lid.endsWith("@lid")) {
           this._addLog("warn", "getNumberId retornou LID, usando @c.us para compatibilidade com sync do celular", { to: cleanNumber, lid });
         } else if (lid) {
           chatId = lid;
         }
       } else {
-        this._addLog("warn", "getNumberId retornou null, tentando @c.us como fallback", { to: cleanNumber });
+        this._addLog("warn", "getNumberId retornou null, forçando criação do chat com @c.us", { to: cleanNumber });
+        // Para números fora da agenda, força a criação do chat no WhatsApp Web
+        // chamando getChatById ANTES do sendMessage. Isso faz o WhatsApp resolver
+        // o número e criar um chat real que sincroniza com o celular.
+        try {
+          const chat = await withTimeout(this.client.getChatById(chatId), 3000, "getChatById");
+          if (chat && chat.id && chat.id._serialized) {
+            chatId = chat.id._serialized;
+          }
+        } catch (_) {
+          // Chat ainda não existe — sendMessage vai criá-lo
+        }
       }
 
-      // Usa client.sendMessage() padrão do whatsapp-web.js (sem Puppeteer direto)
       const sent = await withTimeout(
         this.client.sendMessage(chatId, message),
         this.config.sendTimeoutMs,
