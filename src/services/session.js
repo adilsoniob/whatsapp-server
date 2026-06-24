@@ -169,6 +169,7 @@ export class WhatsAppSession {
 
     let chatId = `${cleanNumber}@c.us`;
     try {
+      // Tenta obter o ID do chat via getNumberId (funciona bem para contatos da agenda)
       const registered = await withTimeout(
         this.client.getNumberId(cleanNumber),
         5000,
@@ -182,17 +183,24 @@ export class WhatsAppSession {
           chatId = lid;
         }
       } else {
-        this._addLog("warn", "getNumberId retornou null, forçando criação do chat com @c.us", { to: cleanNumber });
-        // Para números fora da agenda, força a criação do chat no WhatsApp Web
-        // chamando getChatById ANTES do sendMessage. Isso faz o WhatsApp resolver
-        // o número e criar um chat real que sincroniza com o celular.
+        // getNumberId retornou null (número fora da agenda ou com restrição de privacidade).
+        // Tenta resolver o chat diretamente via Store.Chat do WhatsApp Web,
+        // que cria a conversa de verdade e sincroniza com o celular.
+        this._addLog("warn", "getNumberId retornou null, resolvendo chat via Store.Chat.find", { to: cleanNumber });
         try {
-          const chat = await withTimeout(this.client.getChatById(chatId), 3000, "getChatById");
-          if (chat && chat.id && chat.id._serialized) {
-            chatId = chat.id._serialized;
-          }
+          const resolved = await withTimeout(
+            this.client.pupPage.evaluate((number) => {
+              const id = number + "@c.us";
+              const chat = window.Store.Chat.get(id);
+              if (chat) return chat.id._serialized;
+              return window.Store.Chat.find(id).then(function(c) { return c.id._serialized; }).catch(function() { return id; });
+            }, cleanNumber),
+            5000,
+            "resolveChat"
+          );
+          if (resolved) chatId = resolved;
         } catch (_) {
-          // Chat ainda não existe — sendMessage vai criá-lo
+          // Fallback: mantém @c.us
         }
       }
 
@@ -212,11 +220,17 @@ export class WhatsAppSession {
       this.rate.sent.push(this.rate.lastSend);
       const messageId = sent?.id?._serialized || sent?.id || null;
 
-      // Sincronização pós-envio
-      setImmediate(() => {
-        this.client.getChatById(chatId).then(() => {
-          this.client.getChats().catch(() => {});
-        }).catch(() => {});
+      // Sincronização pós-envio — força o WhatsApp Web a sincronizar com o celular
+      setImmediate(async () => {
+        try {
+          const chat = await this.client.getChatById(chatId);
+          if (chat) {
+            await chat.sendPresenceAvailable().catch(() => {});
+          }
+        } catch (_) {}
+        try {
+          await this.client.getChats();
+        } catch (_) {}
       });
 
       log.info(`[${this.accountLabel}] Mensagem enviada`, { to: chatId, messageId });
